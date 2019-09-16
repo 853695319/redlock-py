@@ -77,7 +77,12 @@ class Redlock(object):
 
     def unlock_instance(self, server, resource, val):
         try:
-            server.eval(self.unlock_script, 1, resource, val)
+            server.eval(
+                self.unlock_script,  # Lua Script in this redis context
+                1,  # the number of arguments
+                resource,   # KEYS[1]
+                val  # ARGV[1]
+                )
         except Exception as e:
             logging.exception("Error unlocking resource %s in server %s", resource, str(server))
 
@@ -107,11 +112,12 @@ class Redlock(object):
                     redis_errors.append(e)
             elapsed_time = int(time.time() * 1000) - start_time
             validity = int(ttl - elapsed_time - drift)
-            if validity > 0 and n >= self.quorum:
+            if validity > 0 and n >= self.quorum:  # 如果超时，或者没有成功将KEY设置到半数以上的Redis实例上
                 if redis_errors:
                     raise MultipleRedlockException(redis_errors)
                 return Lock(validity, resource, val)
             else:
+                # 清理之前设置的KEY
                 for server in self.servers:
                     try:
                         self.unlock_instance(server, resource, val)
